@@ -7,7 +7,6 @@ import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/EnumerableSet.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
-import "./DummyStars.sol";
 
 contract StarsMasterChef is AccessControl {
     using SafeMath for uint256;
@@ -39,10 +38,12 @@ contract StarsMasterChef is AccessControl {
 
     // The Stars token
     IERC20 public stars;
+    IERC20 public stakingToken;
     // Info of each user that stakes Stars.
     mapping(address => UserInfo) public userInfo;
     // The block number when Stars staking starts.
     uint256 public startBlock;
+    event RewardsCollected(address indexed user);
     event Deposit(address indexed user, uint256 amount);
     event Withdraw(address indexed user, uint256 amount);
     event EmergencyWithdraw(address indexed user, uint256 amount);
@@ -64,6 +65,7 @@ contract StarsMasterChef is AccessControl {
      */
     constructor(
         address starsAddress,
+        address stakingTokenAddress,
         uint256 _startBlock,
         address _admin
     ) public {
@@ -71,6 +73,7 @@ contract StarsMasterChef is AccessControl {
         _setRoleAdmin(ROLE_ADMIN, ROLE_ADMIN);
 
         stars = IERC20(starsAddress);
+        stakingToken = IERC20(stakingTokenAddress);
         startBlock = _startBlock;
 
         stars.safeTransferFrom(msg.sender, 40000000 ether);
@@ -142,24 +145,42 @@ contract StarsMasterChef is AccessControl {
         lastRewardBlock = block.number;
     }
 
+    function collectRewards() public {
+      UserInfo storage user = userInfo[msg.sender];
+      updatePool();
+
+      if (user.amount > 0) {
+          uint256 pending =
+              user.amount.mul(accStarsPerShare).sub(user.rewardDebt);
+          safeStarsTransfer(msg.sender, pending);
+      }
+      user.rewardDebt = user.rewardDebt.add(pending);
+      emit RewardsCollected(msg.sender);
+    }
+
     /**
-     * @dev Deposit stars for staking. The sender's pending rewards are
+     * @dev Deposit stars for staking. The sender's pending rewards may be
      * sent to the sender, and the sender's information is updated accordingly.
      *
      * Params:
      * _amount: amount of Stars to deposit
+     * collectRewards: whether or not to collect pending rewards.
      */
-    function deposit(uint256 _amount) public {
+    function deposit(uint256 _amount, bool collectRewards) public {
         UserInfo storage user = userInfo[msg.sender];
         updatePool();
-        if (user.amount > 0) {
-            uint256 pending =
-                user.amount.mul(accStarsPerShare).sub(user.rewardDebt);
-            safeStarsTransfer(msg.sender, pending);
-        }
-        stars.safeTransferFrom(address(msg.sender), address(this), _amount);
+        stakingToken.safeTransferFrom(address(msg.sender), address(this), _amount);
         user.amount = user.amount.add(_amount);
-        user.rewardDebt = user.amount.mul(accStarsPerShare);
+
+        if (collectRewards) {
+          if (user.amount > 0) {
+              uint256 pending =
+                  user.amount.mul(accStarsPerShare).sub(user.rewardDebt);
+              safeStarsTransfer(msg.sender, pending);
+          }
+          user.rewardDebt = user.rewardDebt.sub(pending);
+          emit RewardsCollected(msg.sender);
+        }
         emit Deposit(msg.sender, _amount);
     }
 
@@ -172,17 +193,22 @@ contract StarsMasterChef is AccessControl {
      * Requirements:
      * _amount is less than or equal to the amount of Stars the the user has
      * deposited to the contract
+     * collectRewards: whether or not to collect pending rewards.
      */
-    function withdraw(uint256 _amount) public {
+    function withdraw(uint256 _amount, bool collectRewards) public {
         UserInfo storage user = userInfo[msg.sender];
         require(user.amount >= _amount, "withdraw: not good");
         updatePool();
-        uint256 pending =
-            user.amount.mul(accStarsPerShare).sub(user.rewardDebt);
-        safeStarsTransfer(msg.sender, pending);
         user.amount = user.amount.sub(_amount);
-        user.rewardDebt = user.amount.mul(accStarsPerShare);
-        stars.safeTransfer(address(msg.sender), _amount);
+        stakingToken.safeTransfer(address(msg.sender), _amount);
+
+        if (collectRewards) {
+          uint256 pending =
+              user.amount.mul(accStarsPerShare).sub(user.rewardDebt);
+          safeStarsTransfer(msg.sender, pending);
+
+          user.rewardDebt = user.rewardDebt.sub(pending);
+        }
         emit Withdraw(msg.sender, _amount);
     }
 
