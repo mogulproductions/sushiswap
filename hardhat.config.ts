@@ -37,12 +37,6 @@ const config: HardhatUserConfig = {
   etherscan: {
     apiKey: process.env.ETHERSCAN_API_KEY,
   },
-  gasReporter: {
-    coinmarketcap: process.env.COINMARKETCAP_API_KEY,
-    currency: "USD",
-    enabled: process.env.REPORT_GAS === "true",
-    excludeContracts: ["contracts/mocks/", "contracts/libraries/"],
-  },
   mocha: {
     timeout: 20000,
   },
@@ -70,10 +64,6 @@ const config: HardhatUserConfig = {
       tags: ["local"],
     },
     hardhat: {
-      forking: {
-        enabled: process.env.FORKING === "true",
-        url: `https://eth-mainnet.alchemyapi.io/v2/${process.env.ALCHEMY_API_KEY}`,
-      },
       live: false,
       saveDeployments: true,
       tags: ["test", "local"],
@@ -234,7 +224,7 @@ const config: HardhatUserConfig = {
     deployments: "deployments",
     imports: "imports",
     sources: "contracts",
-    tests: "test",
+    tests: "test/StarsMasterChef",
   },
   preprocess: {
     eachLine: removeConsoleLog(
@@ -258,10 +248,6 @@ const config: HardhatUserConfig = {
   spdxLicenseIdentifier: {
     overwrite: false,
     runOnCompile: true,
-  },
-  tenderly: {
-    project: process.env.TENDERLY_PROJECT!,
-    username: process.env.TENDERLY_USERNAME!,
   },
   typechain: {
     outDir: "types",

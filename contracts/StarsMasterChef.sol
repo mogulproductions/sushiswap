@@ -31,10 +31,10 @@ contract StarsMasterChef is AccessControl {
         //   4. User's `rewardDebt` gets updated.
     }
 
-    uint256 lastRewardBlock; // Last block number that Stars distribution occurs.
-    uint256 accStarsPerShare; // Accumulated Stars per share.
+    uint256 public lastRewardBlock; // Last block number that Stars distribution occurs.
+    uint256 public accStarsPerShare; // Accumulated Stars per share, times 1e12. See below.
 
-    uint256 poolSupply;
+    uint256 public poolSupply;
 
     // The Stars token
     IERC20 public stars;
@@ -75,8 +75,7 @@ contract StarsMasterChef is AccessControl {
         stars = IERC20(starsAddress);
         stakingToken = IERC20(stakingTokenAddress);
         startBlock = _startBlock;
-
-        stars.safeTransferFrom(msg.sender, 40000000 ether);
+        lastRewardBlock = _startBlock;
     }
 
     /**
@@ -88,15 +87,15 @@ contract StarsMasterChef is AccessControl {
     function pendingStars(address _user) external view returns (uint256) {
         UserInfo storage user = userInfo[msg.sender];
         uint256 currRateEndStarsPerShare =
-            accStarsPerShareAtCurrRate(block.number - startBlock);
+            accStarsPerShareAtCurrRate(uint256(block.number).sub(startBlock));
         uint256 currRateStartStarsPerShare =
-            accStarsPerShareAtCurrRate(block.number - lastRewardBlock);
+            accStarsPerShareAtCurrRate(lastRewardBlock.sub(startBlock));
 
         uint256 pendingAccStarsPerShare =
             accStarsPerShare.add(
-                currRateStartStarsPerShare.sub(currRateEndStarsPerShare)
+                currRateEndStarsPerShare.sub(currRateStartStarsPerShare)
             );
-        return user.amount.mul(pendingAccStarsPerShare).sub(user.rewardDebt);
+        return user.amount.mul(pendingAccStarsPerShare).div(1e12).sub(user.rewardDebt);
     }
 
     /**
@@ -113,15 +112,17 @@ contract StarsMasterChef is AccessControl {
         returns (uint256)
     {
         if (blocks >= 600000) {
-            return 400000000 ether;
+            return uint256(400000000 ether).mul(1e12).div(poolSupply);
         } else if (blocks >= 300000) {
             uint256 currTierRewards = (blocks.sub(300000).mul(20 ether));
-            return currTierRewards.add(340000000 ether);
+            return
+                currTierRewards.add(340000000 ether).mul(1e12).div(poolSupply);
         } else if (blocks >= 100000) {
             uint256 currTierRewards = (blocks.sub(100000).mul(70 ether));
-            return currTierRewards.add(200000000 ether);
+            return
+                currTierRewards.add(200000000 ether).mul(1e12).div(poolSupply);
         } else {
-            return blocks.mul(200 ether);
+            return blocks.mul(200 ether).mul(1e12).div(poolSupply);
         }
     }
 
@@ -134,28 +135,35 @@ contract StarsMasterChef is AccessControl {
         if (block.number <= lastRewardBlock) {
             return;
         }
-        uint256 currRateEndStarsPerShare =
-            accStarsPerShareAtCurrRate(block.number - startBlock);
-        uint256 currRateStartStarsPerShare =
-            accStarsPerShareAtCurrRate(block.number - lastRewardBlock);
+        if (poolSupply != 0) {
+            uint256 currRateEndStarsPerShare =
+                accStarsPerShareAtCurrRate(
+                    uint256(block.number).sub(startBlock)
+                );
+            uint256 currRateStartStarsPerShare =
+                accStarsPerShareAtCurrRate(lastRewardBlock.sub(startBlock));
 
-        accStarsPerShare = accStarsPerShare.add(
-            currRateStartStarsPerShare.sub(currRateEndStarsPerShare)
-        );
+            accStarsPerShare = accStarsPerShare.add(
+                currRateEndStarsPerShare.sub(currRateStartStarsPerShare)
+            );
+        }
         lastRewardBlock = block.number;
     }
 
     function collectRewards() public {
-      UserInfo storage user = userInfo[msg.sender];
-      updatePool();
+        UserInfo storage user = userInfo[msg.sender];
+        updatePool();
 
-      if (user.amount > 0) {
-          uint256 pending =
-              user.amount.mul(accStarsPerShare).sub(user.rewardDebt);
-          safeStarsTransfer(msg.sender, pending);
-      }
-      user.rewardDebt = user.rewardDebt.add(pending);
-      emit RewardsCollected(msg.sender);
+        if (user.amount > 0) {
+            uint256 pending =
+                user.amount.mul(accStarsPerShare).div(1e12).sub(
+                    user.rewardDebt
+                );
+            safeStarsTransfer(msg.sender, pending);
+            user.rewardDebt = user.amount.mul(accStarsPerShare).div(1e12);
+        }
+
+        emit RewardsCollected(msg.sender);
     }
 
     /**
@@ -164,23 +172,23 @@ contract StarsMasterChef is AccessControl {
      *
      * Params:
      * _amount: amount of Stars to deposit
-     * collectRewards: whether or not to collect pending rewards.
      */
-    function deposit(uint256 _amount, bool collectRewards) public {
+    function deposit(uint256 _amount) public {
         UserInfo storage user = userInfo[msg.sender];
         updatePool();
-        stakingToken.safeTransferFrom(address(msg.sender), address(this), _amount);
-        user.amount = user.amount.add(_amount);
+        stakingToken.safeTransferFrom(
+            address(msg.sender),
+            address(this),
+            _amount
+        );
 
-        if (collectRewards) {
-          if (user.amount > 0) {
-              uint256 pending =
-                  user.amount.mul(accStarsPerShare).sub(user.rewardDebt);
-              safeStarsTransfer(msg.sender, pending);
-          }
-          user.rewardDebt = user.rewardDebt.sub(pending);
-          emit RewardsCollected(msg.sender);
-        }
+        uint256 pending =
+            user.amount.mul(accStarsPerShare).div(1e12).sub(user.rewardDebt);
+        safeStarsTransfer(msg.sender, pending);
+
+        user.amount = user.amount.add(_amount);
+        user.rewardDebt = user.amount.mul(accStarsPerShare).div(1e12);
+        poolSupply = poolSupply.add(_amount);
         emit Deposit(msg.sender, _amount);
     }
 
@@ -193,22 +201,20 @@ contract StarsMasterChef is AccessControl {
      * Requirements:
      * _amount is less than or equal to the amount of Stars the the user has
      * deposited to the contract
-     * collectRewards: whether or not to collect pending rewards.
      */
-    function withdraw(uint256 _amount, bool collectRewards) public {
+    function withdraw(uint256 _amount) public {
         UserInfo storage user = userInfo[msg.sender];
         require(user.amount >= _amount, "withdraw: not good");
         updatePool();
-        user.amount = user.amount.sub(_amount);
         stakingToken.safeTransfer(address(msg.sender), _amount);
 
-        if (collectRewards) {
-          uint256 pending =
-              user.amount.mul(accStarsPerShare).sub(user.rewardDebt);
-          safeStarsTransfer(msg.sender, pending);
+        uint256 pending =
+            user.amount.mul(accStarsPerShare).div(1e12).sub(user.rewardDebt);
+        safeStarsTransfer(msg.sender, pending);
 
-          user.rewardDebt = user.rewardDebt.sub(pending);
-        }
+        user.amount = user.amount.sub(_amount);
+        user.rewardDebt = user.amount.mul(accStarsPerShare).div(1e12);
+        poolSupply = poolSupply.sub(_amount);
         emit Withdraw(msg.sender, _amount);
     }
 
@@ -238,5 +244,15 @@ contract StarsMasterChef is AccessControl {
         } else {
             stars.transfer(_to, _amount);
         }
+    }
+
+    /**
+     * @dev Withdraw all Stars remaining in contact.
+     *
+     * Params:
+     * withdrawAddress: address to send remaining Stars to
+     */
+    function withdrawRemainingStars(address withdrawAddress) public onlyAdmin {
+        safeStarsTransfer(withdrawAddress, stars.balanceOf(address(this)));
     }
 }
