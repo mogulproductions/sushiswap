@@ -5,8 +5,7 @@ const advanceBlock = require("../utilities").advanceBlock;
 
 describe("StarsMasterChef", async () => {
   let stars, starsMasterChef;
-  let starsMasterChefAsSigner1, starsMasterChefAsSigner2;
-  let starsAsSigner1, starsAsSigner2;
+  let token1, token2;
 
   beforeEach(async function () {
     signers = await ethers.getSigners();
@@ -23,185 +22,352 @@ describe("StarsMasterChef", async () => {
       ]
     );
     await stars.deployed();
+    token1 = await Stars.deploy(
+      [signers[0].address, signers[1].address, signers[2].address],
+      [
+        ethers.utils.parseEther("100"),
+        ethers.utils.parseEther("100"),
+        ethers.utils.parseEther("100"),
+      ]
+    );
+    await token1.deployed();
+    token2 = await Stars.deploy(
+      [signers[0].address, signers[1].address, signers[2].address],
+      [
+        ethers.utils.parseEther("100"),
+        ethers.utils.parseEther("100"),
+        ethers.utils.parseEther("100"),
+      ]
+    );
+    await token2.deployed();
 
     starsMasterChef = await StarsMasterChef.deploy(
       stars.address,
-      stars.address,
-      0,
       signers[0].address
     );
     await starsMasterChef.deployed();
 
-    const provider = stars.provider;
-    const signer1 = provider.getSigner(signers[1].address);
-    const signer2 = provider.getSigner(signers[2].address);
-    starsAsSigner1 = stars.connect(signer1);
-    starsAsSigner2 = stars.connect(signer2);
-    starsMasterChefAsSigner1 = starsMasterChef.connect(signer1);
-    starsMasterChefAsSigner2 = starsMasterChef.connect(signer2);
-
-    await (
-      await stars.transfer(
-        starsMasterChef.address,
-        ethers.utils.parseEther("40000000")
-      )
-    ).wait();
-  });
-
-  it("is initialized properly", async () => {
-    expect(await stars.balanceOf(signers[0].address)).to.equal(
-      ethers.utils.parseEther("100")
-    );
-  });
-
-  it("should distribute Stars properly for each staker", async () => {
     await (
       await stars.approve(
         starsMasterChef.address,
-        ethers.utils.parseEther("100")
+        ethers.utils.parseEther("40000100")
       )
     ).wait();
-    await (await starsMasterChef.deposit(ethers.utils.parseEther("10"))).wait();
-    expect(await starsMasterChef.poolSupply()).to.equal(
-      ethers.utils.parseEther("10")
-    );
 
-    await (await starsMasterChef.updatePool()).wait();
-    expect(await starsMasterChef.accStarsPerShare()).to.equal("20000000000000"); //20 * 1e12
+    await (await starsMasterChef.init(1)).wait();
 
-    await (await starsMasterChef.updatePool()).wait();
-    expect(await starsMasterChef.accStarsPerShare()).to.equal("40000000000000"); //40 * 1e12
+    await (await starsMasterChef.add(100, token1.address, false)).wait();
 
-    await (await starsMasterChef.collectRewards()).wait();
+    const provider = starsMasterChef.provider;
+    signer1 = provider.getSigner(signers[1].address);
+    signer2 = provider.getSigner(signers[2].address);
+  });
+
+  it("is initialized properly", async () => {
+    try {
+      await (await starsMasterChef.init(0)).wait();
+      expect(false).to.be.true;
+    } catch (error) {
+      expect(error.message).to.match(/Already initialized/);
+    }
     expect(await stars.balanceOf(signers[0].address)).to.equal(
-      ethers.utils.parseEther("690")
+      ethers.utils.parseEther("100")
     );
-    await (await starsMasterChef.collectRewards()).wait();
-    expect(await stars.balanceOf(signers[0].address)).to.equal(
-      ethers.utils.parseEther("890")
-    );
+    expect(await starsMasterChef.startBlock()).to.equal(1);
 
+    const pool0 = await starsMasterChef.poolInfo(0);
+    expect(pool0.lastRewardBlock).to.equal(7);
+    expect(pool0.allocPoint).to.equal(100);
+    expect(pool0.accStarsPerShare).to.equal(0);
+    expect(pool0.poolSupply).to.equal(0);
+    expect(pool0.lpToken).to.equal(token1.address);
+
+    expect(await starsMasterChef.totalAllocPoint()).to.equal(100);
+  });
+
+  it("should distribute Stars properly with one pool", async () => {
     await (
-      await starsAsSigner1.approve(
+      await token1.approve(
         starsMasterChef.address,
         ethers.utils.parseEther("100")
       )
     ).wait();
     await (
-      await starsMasterChefAsSigner1.deposit(ethers.utils.parseEther("10"))
+      await starsMasterChef.deposit(0, ethers.utils.parseEther("10"))
     ).wait();
-    expect(await starsMasterChef.poolSupply()).to.equal(
+    expect((await starsMasterChef.poolInfo(0)).poolSupply).to.equal(
+      ethers.utils.parseEther("10")
+    );
+
+    await (await starsMasterChef.updatePool(0)).wait();
+    expect((await starsMasterChef.poolInfo(0)).accStarsPerShare).to.equal(
+      "20000000000000"
+    ); //20 * 1e12
+
+    await (await starsMasterChef.updatePool(0)).wait();
+    expect((await starsMasterChef.poolInfo(0)).accStarsPerShare).to.equal(
+      "40000000000000"
+    ); //20 * 1e12
+
+    await (await starsMasterChef.collectRewards(0)).wait();
+    expect(await stars.balanceOf(signers[0].address)).to.equal(
+      ethers.utils.parseEther("700")
+    );
+    await (await starsMasterChef.collectRewards(0)).wait();
+    expect(await stars.balanceOf(signers[0].address)).to.equal(
+      ethers.utils.parseEther("900")
+    );
+
+    await (
+      await token1
+        .connect(signers[1])
+        .approve(starsMasterChef.address, ethers.utils.parseEther("100"))
+    ).wait();
+    await (
+      await starsMasterChef
+        .connect(signers[1])
+        .deposit(0, ethers.utils.parseEther("10"))
+    ).wait();
+    expect((await starsMasterChef.poolInfo(0)).poolSupply).to.equal(
       ethers.utils.parseEther("20")
     );
-    await (await starsMasterChef.updatePool()).wait();
-    expect(await starsMasterChef.accStarsPerShare()).to.equal(
+    await (await starsMasterChef.updatePool(0)).wait();
+    expect((await starsMasterChef.poolInfo(0)).accStarsPerShare).to.equal(
       "130000000000000"
     );
-    await (await starsMasterChef.collectRewards()).wait();
+    await (await starsMasterChef.collectRewards(0)).wait();
     expect(await stars.balanceOf(signers[0].address)).to.equal(
-      ethers.utils.parseEther("1490")
+      ethers.utils.parseEther("1500")
     );
 
-    await (await starsMasterChef.deposit(ethers.utils.parseEther("20"))).wait();
-    await (await starsMasterChef.updatePool()).wait();
-    expect(await starsMasterChef.accStarsPerShare()).to.equal(
+    await (
+      await starsMasterChef.deposit(0, ethers.utils.parseEther("20"))
+    ).wait();
+    await (await starsMasterChef.updatePool(0)).wait();
+    expect((await starsMasterChef.poolInfo(0)).accStarsPerShare).to.equal(
       "155000000000000"
     );
-    await (await starsMasterChef.collectRewards()).wait();
+    await (await starsMasterChef.collectRewards(0)).wait();
     expect(await stars.balanceOf(signers[0].address)).to.equal(
-      ethers.utils.parseEther("1870")
+      ethers.utils.parseEther("1900")
     );
 
-    await (await starsMasterChef.withdraw(ethers.utils.parseEther("10"))).wait();
-    expect(await starsMasterChef.poolSupply()).to.equal(
-      ethers.utils.parseEther("30")
-    );
-    expect(await starsMasterChef.accStarsPerShare()).to.equal(
+    await (
+      await starsMasterChef.withdraw(0, ethers.utils.parseEther("10"))
+    ).wait();
+    expect((await starsMasterChef.poolInfo(0)).accStarsPerShare).to.equal(
       "165000000000000"
     );
+    await (await starsMasterChef.collectRewards(0)).wait();
     expect(await stars.balanceOf(signers[0].address)).to.equal(
-      ethers.utils.parseEther("2030")
+      ethers.utils.parseEther("2183.33333333334")
     );
-    await (await starsMasterChef.collectRewards()).wait();
+
+    await (await starsMasterChef.connect(signers[1]).collectRewards(0)).wait();
+    expect(await stars.balanceOf(signers[1].address)).to.equal(
+      ethers.utils.parseEther("683.33333333334")
+    );
+  });
+
+  it("should distribute Stars properly with multiple pools", async () => {
+    await (await starsMasterChef.add(300, token2.address, false)).wait();
+    await (
+      await token1.approve(
+        starsMasterChef.address,
+        ethers.utils.parseEther("100")
+      )
+    ).wait();
+    await (
+      await token2.approve(
+        starsMasterChef.address,
+        ethers.utils.parseEther("100")
+      )
+    ).wait();
+    await (
+      await starsMasterChef.deposit(0, ethers.utils.parseEther("10"))
+    ).wait();
+    await (
+      await starsMasterChef.deposit(1, ethers.utils.parseEther("10"))
+    ).wait();
+    expect(await starsMasterChef.pendingStars(0, signers[0].address)).to.equal(
+      ethers.utils.parseEther("50")
+    );
+    await (await starsMasterChef.massUpdatePools()).wait();
+    expect((await starsMasterChef.poolInfo(0)).accStarsPerShare).to.equal(
+      "10000000000000"
+    );
+    expect((await starsMasterChef.poolInfo(1)).accStarsPerShare).to.equal(
+      "15000000000000"
+    );
+    await (await starsMasterChef.massUpdatePools()).wait();
+    expect((await starsMasterChef.poolInfo(0)).accStarsPerShare).to.equal(
+      "15000000000000"
+    );
+    expect((await starsMasterChef.poolInfo(1)).accStarsPerShare).to.equal(
+      "30000000000000"
+    );
+
+    await (await starsMasterChef.collectRewards(0)).wait();
     expect(await stars.balanceOf(signers[0].address)).to.equal(
-      ethers.utils.parseEther("2163.33333333334")
+      ethers.utils.parseEther("300")
+    );
+    await (await starsMasterChef.collectRewards(1)).wait();
+    expect(await stars.balanceOf(signers[0].address)).to.equal(
+      ethers.utils.parseEther("900")
     );
   });
 
   it("deposits work correctly", async () => {
     await (
-      await stars.approve(
+      await token1.approve(
         starsMasterChef.address,
         ethers.utils.parseEther("100")
       )
     ).wait();
-    await (await starsMasterChef.deposit(ethers.utils.parseEther("10"))).wait();
-    expect(await starsMasterChef.poolSupply()).to.equal(
+    await (
+      await starsMasterChef.deposit(0, ethers.utils.parseEther("10"))
+    ).wait();
+    expect((await starsMasterChef.poolInfo(0)).poolSupply).to.equal(
       ethers.utils.parseEther("10")
     );
     expect(
-      (await starsMasterChef.userInfo(signers[0].address)).amount
+      (await starsMasterChef.userInfo(0, signers[0].address)).amount
     ).to.equal(ethers.utils.parseEther("10"));
   });
 
   it("withdrawals work correctly", async () => {
     await (
-      await stars.approve(
+      await token1.approve(
         starsMasterChef.address,
         ethers.utils.parseEther("100")
       )
     ).wait();
-    await (await starsMasterChef.deposit(ethers.utils.parseEther("10"))).wait();
+    await (
+      await starsMasterChef.deposit(0, ethers.utils.parseEther("10"))
+    ).wait();
 
-    await (await starsMasterChef.withdraw(ethers.utils.parseEther("5"))).wait();
-    expect(await starsMasterChef.poolSupply()).to.equal(
+    await (
+      await starsMasterChef.withdraw(0, ethers.utils.parseEther("5"))
+    ).wait();
+    expect((await starsMasterChef.poolInfo(0)).poolSupply).to.equal(
       ethers.utils.parseEther("5")
     );
     expect(
-      (await starsMasterChef.userInfo(signers[0].address)).amount
+      (await starsMasterChef.userInfo(0, signers[0].address)).amount
     ).to.equal(ethers.utils.parseEther("5"));
 
-    await (await starsMasterChef.withdraw(ethers.utils.parseEther("5"))).wait();
-    expect(await starsMasterChef.poolSupply()).to.equal(
+    await (
+      await starsMasterChef.withdraw(0, ethers.utils.parseEther("5"))
+    ).wait();
+    expect((await starsMasterChef.poolInfo(0)).poolSupply).to.equal(
       ethers.utils.parseEther("0")
     );
     expect(
-      (await starsMasterChef.userInfo(signers[0].address)).amount
+      (await starsMasterChef.userInfo(0, signers[0].address)).amount
     ).to.equal(ethers.utils.parseEther("0"));
   });
 
   it("calculates pending rewards correctly", async () => {
     await (
-      await stars.approve(
+      await token1.approve(
         starsMasterChef.address,
         ethers.utils.parseEther("100")
       )
     ).wait();
-    await (await starsMasterChef.deposit(ethers.utils.parseEther("10"))).wait();
+    await (
+      await starsMasterChef.deposit(0, ethers.utils.parseEther("10"))
+    ).wait();
     await advanceBlock();
-    expect(await starsMasterChef.pendingStars(signers[0].address)).to.equal(ethers.utils.parseEther("200"));
+    expect(await starsMasterChef.pendingStars(0, signers[0].address)).to.equal(
+      ethers.utils.parseEther("200")
+    );
   });
 
-  it("withdraws remaining Stars correctly", async () => {
+  it("processes emergency withdrawals", async () => {
+    await (
+      await token1.approve(
+        starsMasterChef.address,
+        ethers.utils.parseEther("100")
+      )
+    ).wait();
+    await (
+      await starsMasterChef.deposit(0, ethers.utils.parseEther("100"))
+    ).wait();
+    expect(await token1.balanceOf(signers[0].address)).to.equal(
+      ethers.utils.parseEther("0")
+    );
+    await await starsMasterChef.emergencyWithdraw(0);
+    expect((await starsMasterChef.poolInfo(0)).poolSupply).to.equal(
+      ethers.utils.parseEther("0")
+    );
+    expect(await token1.balanceOf(signers[0].address)).to.equal(
+      ethers.utils.parseEther("100")
+    );
+
+    const user = await starsMasterChef.userInfo(0, signers[0].address);
+    expect(user.amount).to.equal(0);
+    expect(user.rewardDebt).to.equal(0);
+  });
+
+  it("should calculates the accumulated Stars per share correctly for later periods", async () => {
+    expect(
+      await starsMasterChef.accStarsPerShareAtCurrRate(150000, 1)
+    ).to.equal(ethers.utils.parseEther("23500000000000000000"));
+    expect(
+      await starsMasterChef.accStarsPerShareAtCurrRate(350000, 1)
+    ).to.equal(ethers.utils.parseEther("35000000000000000000"));
+    expect(
+      await starsMasterChef.accStarsPerShareAtCurrRate(600000, 1)
+    ).to.equal(ethers.utils.parseEther("40000000000000000000"));
+    expect(
+      await starsMasterChef.accStarsPerShareAtCurrRate(700000, 1)
+    ).to.equal(ethers.utils.parseEther("40000000000000000000"));
+  });
+
+  it("grants & revokes admin permissions", async () => {
+    const adminRole = await starsMasterChef.ROLE_ADMIN();
+
     try {
       await (
-        await starsMasterChefAsSigner1.withdrawRemainingStars(
-          signers[0].address
-        )
+        await starsMasterChef
+          .connect(signers[1])
+          .grantRole(adminRole, signers[2].address)
       ).wait();
       expect(false).to.be.true;
-    } catch (error) {
-      expect(error.message).to.match(/Sender is not admin/);
+    } catch (e) {
+      expect(e.message).to.match(/sender must be an admin to grant/);
     }
 
     await (
-      await starsMasterChef.withdrawRemainingStars(signers[0].address)
+      await starsMasterChef.grantRole(adminRole, signers[2].address)
     ).wait();
-    expect(await stars.balanceOf(starsMasterChef.address)).to.equal(
-      ethers.utils.parseEther("0")
-    );
-    expect(await stars.balanceOf(signers[0].address)).to.equal(
-      ethers.utils.parseEther("40000100")
-    );
+    expect(await starsMasterChef.hasRole(adminRole, signers[2].address)).to.be
+      .true;
+
+    await (
+      await starsMasterChef.revokeRole(adminRole, signers[2].address)
+    ).wait();
+
+    expect(await starsMasterChef.hasRole(adminRole, signers[2].address)).to.be
+      .false;
+  });
+
+  it("adds pools correctly", async () => {
+    await (await starsMasterChef.add(150, token2.address, true)).wait();
+    const pool1 = await starsMasterChef.poolInfo(1);
+    expect(pool1.allocPoint).to.equal(150);
+    expect(pool1.accStarsPerShare).to.equal(0);
+    expect(pool1.poolSupply).to.equal(0);
+    expect(pool1.lpToken).to.equal(token2.address);
+
+    expect(await starsMasterChef.totalAllocPoint()).to.equal(250);
+  });
+
+  it("sets pools correctly", async () => {
+    await (await starsMasterChef.set(0, 200, true)).wait();
+    const pool0 = await starsMasterChef.poolInfo(0);
+    expect(pool0.allocPoint).to.equal(200);
+
+    expect(await starsMasterChef.totalAllocPoint()).to.equal(200);
   });
 });
