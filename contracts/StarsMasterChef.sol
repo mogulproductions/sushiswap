@@ -50,6 +50,12 @@ contract StarsMasterChef is AccessControl {
     bool public initialized;
     // Total allocation poitns. Must be the sum of all allocation points in all pools.
     uint256 public totalAllocPoint = 0;
+    // Total Stars awarded per block on each of the 3 epochs
+    uint256[3] public rewardAmounts;
+    // The number of blocks since the starting block until each epoch ends
+    uint256[3] public epochs;
+    // The total number of stars distributed as rewards in each epoch
+    uint256[3] public totalStarsPerEpoch;
     event RewardsCollected(address indexed user, uint256 indexed pid);
     event Deposit(address indexed user, uint256 indexed pid, uint256 amount);
     event Withdraw(address indexed user, uint256 indexed pid, uint256 amount);
@@ -78,11 +84,31 @@ contract StarsMasterChef is AccessControl {
      * starsAddress: the address of the Stars contract
      * _admin: the address of the first admin
      */
-    constructor(address starsAddress, address _admin) public {
+    constructor(
+        address starsAddress,
+        address _admin,
+        uint256[3] memory _rewardAmounts,
+        uint256[3] memory _epochs
+    ) public {
         _setupRole(ROLE_ADMIN, _admin);
         _setRoleAdmin(ROLE_ADMIN, ROLE_ADMIN);
 
+        require(
+            _epochs[0] < _epochs[1] && _epochs[1] < _epochs[2],
+            "invalid epochs"
+        );
+
         stars = IERC20(starsAddress);
+        rewardAmounts = _rewardAmounts;
+        epochs = _epochs;
+
+        totalStarsPerEpoch[0] = _rewardAmounts[0].mul(_epochs[0]);
+        totalStarsPerEpoch[1] = _rewardAmounts[1].mul(
+            _epochs[1].sub(_epochs[0])
+        );
+        totalStarsPerEpoch[2] = _rewardAmounts[2].mul(
+            _epochs[2].sub(_epochs[1])
+        );
     }
 
     /**
@@ -93,7 +119,13 @@ contract StarsMasterChef is AccessControl {
      */
     function init(uint256 _startBlock) public onlyAdmin {
         require(!initialized, "Already initialized");
-        stars.safeTransferFrom(msg.sender, address(this), 40000000 ether);
+        stars.safeTransferFrom(
+            msg.sender,
+            address(this),
+            totalStarsPerEpoch[0].add(totalStarsPerEpoch[1]).add(
+                totalStarsPerEpoch[2]
+            )
+        );
         startBlock = _startBlock;
         initialized = true;
     }
@@ -200,18 +232,31 @@ contract StarsMasterChef is AccessControl {
         view
         returns (uint256)
     {
-        if (blocks >= 600000) {
-            return uint256(40000000 ether).mul(1e12).div(poolSupply);
-        } else if (blocks >= 300000) {
-            uint256 currTierRewards = (blocks.sub(300000).mul(20 ether));
+        if (blocks > epochs[2]) {
             return
-                currTierRewards.add(34000000 ether).mul(1e12).div(poolSupply);
-        } else if (blocks >= 100000) {
-            uint256 currTierRewards = (blocks.sub(100000).mul(70 ether));
+                totalStarsPerEpoch[0]
+                    .add(totalStarsPerEpoch[1])
+                    .add(totalStarsPerEpoch[2])
+                    .mul(1e12)
+                    .div(poolSupply);
+        } else if (blocks > epochs[1]) {
+            uint256 currTierRewards =
+                (blocks.sub(epochs[1]).mul(rewardAmounts[2]));
             return
-                currTierRewards.add(20000000 ether).mul(1e12).div(poolSupply);
+                totalStarsPerEpoch[0]
+                    .add(totalStarsPerEpoch[1])
+                    .add(currTierRewards)
+                    .mul(1e12)
+                    .div(poolSupply);
+        } else if (blocks > epochs[0]) {
+            uint256 currTierRewards =
+                (blocks.sub(epochs[0]).mul(rewardAmounts[1]));
+            return
+                totalStarsPerEpoch[0].add(currTierRewards).mul(1e12).div(
+                    poolSupply
+                );
         } else {
-            return blocks.mul(200 ether).mul(1e12).div(poolSupply);
+            return blocks.mul(rewardAmounts[0]).mul(1e12).div(poolSupply);
         }
     }
 
@@ -226,14 +271,14 @@ contract StarsMasterChef is AccessControl {
         returns (uint256 amount)
     {
         uint256 blocks = uint256(block.number).sub(startBlock);
-        if (blocks >= 600000) {
+        if (blocks >= epochs[2]) {
             return 0;
-        } else if (blocks >= 300000) {
-            return 20 ether;
-        } else if (blocks >= 100000) {
-            return 70 ether;
+        } else if (blocks >= epochs[1]) {
+            return rewardAmounts[2];
+        } else if (blocks >= epochs[0]) {
+            return rewardAmounts[1];
         } else {
-            return 200 ether;
+            return rewardAmounts[0];
         }
     }
 

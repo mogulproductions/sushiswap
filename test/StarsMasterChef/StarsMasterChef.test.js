@@ -43,7 +43,13 @@ describe("StarsMasterChef", async () => {
 
     starsMasterChef = await StarsMasterChef.deploy(
       stars.address,
-      signers[0].address
+      signers[0].address,
+      [
+        ethers.utils.parseEther("200"),
+        ethers.utils.parseEther("70"),
+        ethers.utils.parseEther("20"),
+      ],
+      [100000, 300000, 600000]
     );
     await starsMasterChef.deployed();
 
@@ -57,10 +63,6 @@ describe("StarsMasterChef", async () => {
     await (await starsMasterChef.init(1)).wait();
 
     await (await starsMasterChef.add(100, token1.address, false)).wait();
-
-    const provider = starsMasterChef.provider;
-    signer1 = provider.getSigner(signers[1].address);
-    signer2 = provider.getSigner(signers[2].address);
   });
 
   it("is initialized properly", async () => {
@@ -83,6 +85,16 @@ describe("StarsMasterChef", async () => {
     expect(pool0.lpToken).to.equal(token1.address);
 
     expect(await starsMasterChef.totalAllocPoint()).to.equal(100);
+
+    expect(await starsMasterChef.totalStarsPerEpoch(0)).to.equal(
+      ethers.utils.parseEther("20000000")
+    );
+    expect(await starsMasterChef.totalStarsPerEpoch(1)).to.equal(
+      ethers.utils.parseEther("14000000")
+    );
+    expect(await starsMasterChef.totalStarsPerEpoch(2)).to.equal(
+      ethers.utils.parseEther("6000000")
+    );
   });
 
   it("should distribute Stars properly with one pool", async () => {
@@ -107,7 +119,7 @@ describe("StarsMasterChef", async () => {
     await (await starsMasterChef.updatePool(0)).wait();
     expect((await starsMasterChef.poolInfo(0)).accStarsPerShare).to.equal(
       "40000000000000"
-    ); //20 * 1e12
+    ); //40 * 1e12
 
     await (await starsMasterChef.collectRewards(0)).wait();
     expect(await stars.balanceOf(signers[0].address)).to.equal(
@@ -214,6 +226,135 @@ describe("StarsMasterChef", async () => {
     await (await starsMasterChef.collectRewards(1)).wait();
     expect(await stars.balanceOf(signers[0].address)).to.equal(
       ethers.utils.parseEther("900")
+    );
+  });
+
+  it("should distribute Stars properly in all 3 epochs", async () => {
+    const StarsMasterChef = await ethers.getContractFactory("StarsMasterChef");
+    const Stars = await ethers.getContractFactory("DummyStars");
+
+    starsCopy = await Stars.deploy(
+      [signers[0].address, signers[1].address, signers[2].address],
+      [
+        ethers.utils.parseEther("40100"),
+        ethers.utils.parseEther("100"),
+        ethers.utils.parseEther("100"),
+      ]
+    );
+    await starsCopy.deployed();
+
+    //Same contract, but with different epochs
+    starsMasterChefCopy = await StarsMasterChef.deploy(
+      starsCopy.address,
+      signers[0].address,
+      [
+        ethers.utils.parseEther("200"),
+        ethers.utils.parseEther("70"),
+        ethers.utils.parseEther("20"),
+      ],
+      [100, 300, 600]
+    );
+    await starsMasterChefCopy.deployed();
+
+    await (
+      await starsCopy.approve(
+        starsMasterChefCopy.address,
+        ethers.utils.parseEther("40100")
+      )
+    ).wait();
+
+    await (await starsMasterChefCopy.init(0)).wait();
+    await (await starsMasterChefCopy.add(100, token1.address, false)).wait();
+
+    expect(await starsCopy.balanceOf(signers[0].address)).to.equal(
+      ethers.utils.parseEther("100")
+    );
+    expect(await starsCopy.balanceOf(starsMasterChefCopy.address)).to.equal(
+      ethers.utils.parseEther("40000")
+    );
+
+    await (
+      await token1.approve(
+        starsMasterChefCopy.address,
+        ethers.utils.parseEther("100")
+      )
+    ).wait();
+    await (
+      await token1
+        .connect(signers[1])
+        .approve(starsMasterChefCopy.address, ethers.utils.parseEther("100"))
+    ).wait();
+
+    await (
+      await starsMasterChefCopy.deposit(0, ethers.utils.parseEther("10"))
+    ).wait();
+    await (
+      await starsMasterChefCopy
+        .connect(signers[1])
+        .deposit(0, ethers.utils.parseEther("30"))
+    ).wait();
+
+    expect(await starsMasterChefCopy.provider.getBlockNumber()).to.equal(63);
+    expect(
+      await starsMasterChefCopy.pendingStars(0, signers[0].address)
+    ).to.equal(ethers.utils.parseEther("200"));
+    expect(
+      await starsMasterChefCopy.pendingStars(0, signers[1].address)
+    ).to.equal(ethers.utils.parseEther("0"));
+    await advanceBlockTo(100);
+    expect(
+      await starsMasterChefCopy.pendingStars(0, signers[0].address)
+    ).to.equal(ethers.utils.parseEther("2050"));
+    expect(
+      await starsMasterChefCopy.pendingStars(0, signers[1].address)
+    ).to.equal(ethers.utils.parseEther("5550"));
+    await advanceBlockTo(150);
+    expect(
+      await starsMasterChefCopy.pendingStars(0, signers[0].address)
+    ).to.equal(ethers.utils.parseEther("2925"));
+    expect(
+      await starsMasterChefCopy.pendingStars(0, signers[1].address)
+    ).to.equal(ethers.utils.parseEther("8175"));
+    await advanceBlockTo(300);
+    expect(
+      await starsMasterChefCopy.pendingStars(0, signers[0].address)
+    ).to.equal(ethers.utils.parseEther("5550"));
+    expect(
+      await starsMasterChefCopy.pendingStars(0, signers[1].address)
+    ).to.equal(ethers.utils.parseEther("16050"));
+    await advanceBlockTo(400);
+    expect(
+      await starsMasterChefCopy.pendingStars(0, signers[0].address)
+    ).to.equal(ethers.utils.parseEther("6050"));
+    expect(
+      await starsMasterChefCopy.pendingStars(0, signers[1].address)
+    ).to.equal(ethers.utils.parseEther("17550"));
+    await advanceBlockTo(700);
+    expect(
+      await starsMasterChefCopy.pendingStars(0, signers[0].address)
+    ).to.equal(ethers.utils.parseEther("7050"));
+    expect(
+      await starsMasterChefCopy.pendingStars(0, signers[1].address)
+    ).to.equal(ethers.utils.parseEther("20550"));
+
+    await (
+      await starsMasterChefCopy.withdraw(0, ethers.utils.parseEther("10"))
+    ).wait();
+    await (
+      await starsMasterChefCopy
+        .connect(signers[1])
+        .withdraw(0, ethers.utils.parseEther("30"))
+    ).wait();
+
+    expect(await starsCopy.balanceOf(signers[0].address)).to.equal(
+      ethers.utils.parseEther("7150")
+    );
+    expect(await starsCopy.balanceOf(signers[1].address)).to.equal(
+      ethers.utils.parseEther("20650")
+    );
+
+    expect(await starsCopy.balanceOf(starsMasterChefCopy.address)).to.equal(
+      ethers.utils.parseEther("12400")
     );
   });
 
