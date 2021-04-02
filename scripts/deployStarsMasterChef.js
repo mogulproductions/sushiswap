@@ -9,11 +9,10 @@ async function main() {
   const Stars = await ethers.getContractFactory("DummyStars");
 
   stars = await Stars.deploy(
-    [signers[0].address, signers[1].address, signers[2].address],
+    [signers[0].address, "0x9577f62E26389C4a301A892672e53188CD735bDF"],
     [
-      ethers.utils.parseEther("40000100"),
-      ethers.utils.parseEther("100"),
-      ethers.utils.parseEther("100"),
+      ethers.utils.parseEther("1000000000"),
+      ethers.utils.parseEther("1000000000"),
     ]
   );
   await stars.deployed();
@@ -27,7 +26,7 @@ async function main() {
       ethers.utils.parseEther("70"),
       ethers.utils.parseEther("20"),
     ],
-    [100000, 300000, 600000]
+    [120, 240, 360]
   );
   await starsMasterChef.deployed();
   console.log("StarsMasterChef deployed to: ", starsMasterChef.address);

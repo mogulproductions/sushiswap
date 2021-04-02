@@ -142,7 +142,7 @@ contract StarsMasterChef is AccessControl {
         uint256 _allocPoint,
         IERC20 _lpToken,
         bool _withUpdate
-    ) public onlyAdmin {
+    ) public onlyAdmin isInitialized {
         if (_withUpdate) {
             massUpdatePools();
         }
@@ -172,7 +172,7 @@ contract StarsMasterChef is AccessControl {
         uint256 _pid,
         uint256 _allocPoint,
         bool _withUpdate
-    ) public onlyAdmin {
+    ) public onlyAdmin isInitialized {
         if (_withUpdate) {
             massUpdatePools();
         }
@@ -196,6 +196,11 @@ contract StarsMasterChef is AccessControl {
     {
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][_user];
+
+        if (pool.poolSupply == 0) {
+          return 0;
+        }
+
         uint256 currRateEndStarsPerShare =
             accStarsPerShareAtCurrRate(
                 uint256(block.number).sub(startBlock),
@@ -314,7 +319,7 @@ contract StarsMasterChef is AccessControl {
     }
 
     // Update reward vairables for all pools. Be careful of gas spending!
-    function massUpdatePools() public {
+    function massUpdatePools() public isInitialized {
         uint256 length = poolInfo.length;
         for (uint256 pid = 0; pid < length; ++pid) {
             updatePool(pid);

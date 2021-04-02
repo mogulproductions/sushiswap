@@ -422,6 +422,11 @@ describe("StarsMasterChef", async () => {
     expect(await starsMasterChef.pendingStars(0, signers[0].address)).to.equal(
       ethers.utils.parseEther("200")
     );
+
+    await (await starsMasterChef.add(150, token2.address, false)).wait();
+    expect(await starsMasterChef.pendingStars(1, signers[0].address)).to.equal(
+      0
+    );
   });
 
   it("processes emergency withdrawals", async () => {
