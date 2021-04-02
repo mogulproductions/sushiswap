@@ -20,7 +20,7 @@ async function main() {
 
   starsMasterChef = await StarsMasterChef.deploy(
     stars.address,
-    signers[0].address,
+    "0x9577f62E26389C4a301A892672e53188CD735bDF",
     [
       ethers.utils.parseEther("200"),
       ethers.utils.parseEther("70"),

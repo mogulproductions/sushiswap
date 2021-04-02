@@ -131,6 +131,13 @@ contract StarsMasterChef is AccessControl {
     }
 
     /**
+     * @dev Returns the number of pools there are for front-end.
+     */
+    function poolLength() external view returns (uint256) {
+        return poolInfo.length;
+    }
+
+    /**
      * @dev Adds a new pool. Admin only
      *
      * Params:

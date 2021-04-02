@@ -498,7 +498,10 @@ describe("StarsMasterChef", async () => {
       .false;
   });
 
-  it("adds pools correctly", async () => {
+  it("adds pools and updates the total allocation points and pool length", async () => {
+    expect(await starsMasterChef.poolLength()).to.equal(1);
+    expect(await starsMasterChef.totalAllocPoint()).to.equal(100);
+
     await (await starsMasterChef.add(150, token2.address, true)).wait();
     const pool1 = await starsMasterChef.poolInfo(1);
     expect(pool1.allocPoint).to.equal(150);
@@ -507,6 +510,7 @@ describe("StarsMasterChef", async () => {
     expect(pool1.lpToken).to.equal(token2.address);
 
     expect(await starsMasterChef.totalAllocPoint()).to.equal(250);
+    expect(await starsMasterChef.poolLength()).to.equal(2);
   });
 
   it("sets pools correctly", async () => {
