@@ -70,7 +70,8 @@ const config: HardhatUserConfig = {
     },
     ropsten: {
       url: `https://ropsten.infura.io/v3/${process.env.INFURA_API_KEY}`,
-      accounts: [process.env.ROPSTEN_PRIVATE_KEY],
+      accounts,
+      //accounts: [process.env.ROPSTEN_PRIVATE_KEY],
       chainId: 3,
       live: true,
       saveDeployments: true,
