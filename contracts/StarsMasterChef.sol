@@ -4,7 +4,6 @@ pragma solidity 0.6.12;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
-import "@openzeppelin/contracts/utils/EnumerableSet.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 
@@ -33,9 +32,9 @@ contract StarsMasterChef is AccessControl {
 
     struct PoolInfo {
         IERC20 lpToken; // Address of LP token contract.
-        uint256 allocPoint; // How many allocation points assigned to this pool. SUSHIs to distribute per block.
-        uint256 lastRewardBlock; // Last block number that SUSHIs distribution occurs.
-        uint256 accStarsPerShare; // Accumulated SUSHIs per share, times 1e12. See below.
+        uint256 allocPoint; // How many allocation points assigned to this pool. Stars to distribute per block.
+        uint256 lastRewardBlock; // Last block number that Stars distribution occurs.
+        uint256 accStarsPerShare; // Accumulated Stars per share, times 1e12. See below.
         uint256 poolSupply;
     }
 
@@ -76,9 +75,9 @@ contract StarsMasterChef is AccessControl {
     }
 
     /**
-     * @dev Sets the start block and the first admin,
-     * and stores the Stars contract. Allows users with the admin role to
-     * grant/revoke the admin role from other users.
+     * @dev Stores the Stars contract, and allows users with the admin role to
+     * grant/revoke the admin role from other users. Sets reward amounts and
+     * epochs.
      *
      * Params:
      * starsAddress: the address of the Stars contract
@@ -205,7 +204,7 @@ contract StarsMasterChef is AccessControl {
         UserInfo storage user = userInfo[_pid][_user];
 
         if (pool.poolSupply == 0) {
-          return 0;
+            return 0;
         }
 
         uint256 currRateEndStarsPerShare =
@@ -420,19 +419,20 @@ contract StarsMasterChef is AccessControl {
     /**
      * @dev Withdraw without caring about rewards. EMERGENCY ONLY.
      */
-    function emergencyWithdraw(uint256 _pid) public isInitialized {
+    function emergencyWithdraw(uint256 _pid) external isInitialized {
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][msg.sender];
         pool.lpToken.safeTransfer(address(msg.sender), user.amount);
         emit EmergencyWithdraw(msg.sender, _pid, user.amount);
-        pool.poolSupply -= user.amount;
+        pool.poolSupply = pool.poolSupply.sub(user.amount);
         user.amount = 0;
         user.rewardDebt = 0;
     }
 
     /**
-     * @dev Safe sushi transfer function, just in case if rounding error causes
-     * pool to not have enough Stars.
+     * @dev Safe Stars transfer function, just in case if rounding error causes
+     * pool to not have enough Stars. Transaction gas fee on additional checks
+     * will be more expensive than the possible rounding profit itself.
      *
      * Params:
      * _to: address to send Stars to
