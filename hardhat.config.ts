@@ -1,29 +1,27 @@
 // hardhat.config.ts
 
-import "dotenv/config";
-import "@nomiclabs/hardhat-etherscan";
-import "@nomiclabs/hardhat-solhint";
-import "@tenderly/hardhat-tenderly";
-import "@nomiclabs/hardhat-waffle";
-import "hardhat-abi-exporter";
-import "hardhat-deploy";
-import "hardhat-deploy-ethers";
-import "hardhat-gas-reporter";
-import "hardhat-spdx-license-identifier";
-import "hardhat-typechain";
-import "hardhat-watcher";
-import "solidity-coverage";
-import "./tasks";
+import "dotenv/config"
+import "@nomiclabs/hardhat-etherscan"
+import "@nomiclabs/hardhat-solhint"
+import "@tenderly/hardhat-tenderly"
+import "@nomiclabs/hardhat-waffle"
+import "hardhat-abi-exporter"
+import "hardhat-deploy"
+import "hardhat-deploy-ethers"
+import "hardhat-gas-reporter"
+import "hardhat-spdx-license-identifier"
+import "hardhat-typechain"
+import "hardhat-watcher"
+import "solidity-coverage"
+import "./tasks"
 
-import { HardhatUserConfig } from "hardhat/types";
-import { removeConsoleLog } from "hardhat-preprocessor";
+import { HardhatUserConfig } from "hardhat/types"
+import { removeConsoleLog } from "hardhat-preprocessor"
 
 const accounts = {
-  mnemonic:
-    process.env.MNEMONIC ||
-    "test test test test test test test test test test test junk",
+  mnemonic: process.env.MNEMONIC || "test test test test test test test test test test test junk",
   // accountsBalance: "990000000000000000000",
-};
+}
 
 const config: HardhatUserConfig = {
   abiExporter: {
@@ -54,9 +52,7 @@ const config: HardhatUserConfig = {
   networks: {
     mainnet: {
       url: `https://mainnet.infura.io/v3/${process.env.INFURA_API_KEY}`,
-      accounts,
-      gasPrice: 120 * 1000000000,
-      chainId: 1,
+      accounts: [process.env.MAINNET_PRIVATE_KEY],
     },
     localhost: {
       live: false,
@@ -216,7 +212,7 @@ const config: HardhatUserConfig = {
       saveDeployments: true,
       tags: ["staging"],
       gasMultiplier: 2,
-    }
+    },
   },
   paths: {
     artifacts: "artifacts",
@@ -228,10 +224,7 @@ const config: HardhatUserConfig = {
     tests: "test/StarsMasterChef",
   },
   preprocess: {
-    eachLine: removeConsoleLog(
-      (bre) =>
-        bre.network.name !== "hardhat" && bre.network.name !== "localhost"
-    ),
+    eachLine: removeConsoleLog((bre) => bre.network.name !== "hardhat" && bre.network.name !== "localhost"),
   },
   solidity: {
     compilers: [
@@ -261,6 +254,6 @@ const config: HardhatUserConfig = {
       verbose: true,
     },
   },
-};
+}
 
-export default config;
+export default config

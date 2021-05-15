@@ -1,12 +1,8 @@
 const { parseEther } = require("ethers/lib/utils");
 
 module.exports = [
-"0x5F2A75ffB82e9CC058dDE73716cB6fBd78dBAfF5",
-"0x9577f62E26389C4a301A892672e53188CD735bDF",
-[
-  parseEther("200"),
-  parseEther("70"),
-  parseEther("20"),
-],
-[120, 240, 360]
-]
+  "0x37767d8102966577A4f5c7930e0657C592E5061b",
+  "0x1c3B019F6d5a38d3EEea65cc8AB8EcA8D61dCC70",
+  [parseEther("200"), parseEther("70"), parseEther("20")],
+  [100000, 300000, 600000],
+];
