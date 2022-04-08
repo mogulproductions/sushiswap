@@ -1,5 +1,8 @@
 # Development
 
+## NPM I ERROR
+Refer to solutions here: https://stackoverflow.com/questions/70663523/the-unauthenticated-git-protocol-on-port-9418-is-no-longer-supported
+
 ## Local environment
 
 ```sh
